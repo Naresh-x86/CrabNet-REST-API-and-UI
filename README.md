@@ -65,6 +65,11 @@ For the steps, please see the readme located at [README_ExplainableGap.md](READM
 
 
 
-## Maintainers
+## Original CrabNet Maintainers
 * [`sgbaird`](https://github.com/sgbaird), Sterling Baird (main maintainer)
 * [`anthony-wang`](https://github.com/anthony-wang), Anthony Wang
+
+## REST API and UI
+Added a Python FastAPI backend (`/backend`) and a Next.js frontend (`/frontend`) to create an interactive prediction tool. You do need to have the trained weights stored in `models/trained_models`.
+
+Trained weights available at: http://doi.org/10.5281/zenodo.4321168
