@@ -19,7 +19,7 @@ echo.
 echo Interactive docs: http://localhost:8000/docs
 echo.
 
-cd API_backend
+cd backend
 python main.py
 
 pause
