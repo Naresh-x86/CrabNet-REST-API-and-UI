@@ -339,6 +339,7 @@ function ResultsContent() {
             </div>
           ) : materialSummary ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/*
               <PropertyRow
                 label="Band Gap"
                 value={`${formatNumber(materialSummary.band_gap, 2)} eV`}
@@ -349,6 +350,7 @@ function ResultsContent() {
                 value={`${formatNumber(materialSummary.formation_energy_per_atom, 4)} eV/atom`}
                 icon="🔋"
               />
+              */}
               <PropertyRow
                 label="Magnetic Ordering"
                 value={formatMagneticOrdering(materialSummary.ordering)}
@@ -534,7 +536,7 @@ function ResultsContent() {
       <footer className="border-t border-zinc-200 bg-white/50 py-6">
         <div className="mx-auto max-w-7xl px-6 text-center text-sm text-zinc-500">
           <p>
-            Powered by CrabNet Neural Network • Data from Materials Project
+            CrabNet • Compositionally-restricted attention-based Network
           </p>
         </div>
       </footer>

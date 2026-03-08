@@ -138,7 +138,7 @@ export default function Home() {
                   Select Property
                 </h3>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Choose which material property you want to predict from 80+
+                  Choose which material property you want to predict from
                   available options
                 </p>
               </div>
@@ -260,7 +260,7 @@ export default function Home() {
       <footer className="border-t border-zinc-200 bg-white/50 py-6">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-zinc-500">
           <p>
-            Powered by CrabNet Neural Network • Data from Materials Project
+            CrabNet • Compositionally-restricted attention-based Network
           </p>
         </div>
       </footer>

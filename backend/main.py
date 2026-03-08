@@ -29,6 +29,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Debug mode configuration
+DEBUG_MODE = True  # Set to True to restrict available properties
+ALLOWED_PROPERTIES = ["mp_gap0", "mp_bulk_modulus", "mp_e_form0", "mp_shear_modulus", "OQMD_Volume_per_atom", "mp_mu_b", "dielectric0", "OQMD_Energy_per_atom", "mp_is_metal0"]
+
 # Add CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
@@ -227,6 +231,9 @@ async def get_models():
     Returns a list of model names with descriptions and units.
     """
     models = predictor.list_models()
+    
+    if DEBUG_MODE:
+        models = [m for m in models if m in ALLOWED_PROPERTIES]
     
     result = []
     for model_name in models:
