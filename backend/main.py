@@ -19,6 +19,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from crabnet_predictor import CrabNetPredictor
+from psmiles_predictor import get_psmiles_predictor
 from formula_utils import normalize_formula
 from config import MP_API_KEY, MP_BASE_URL
 
@@ -44,6 +45,16 @@ app.add_middleware(
 
 # Initialize CrabNet predictor (singleton)
 predictor = CrabNetPredictor()
+
+# Initialize PSMILES predictor (singleton) - lazy loaded
+psmiles_predictor = None
+
+def get_psmiles():
+    """Lazy load PSMILES predictor."""
+    global psmiles_predictor
+    if psmiles_predictor is None:
+        psmiles_predictor = get_psmiles_predictor()
+    return psmiles_predictor
 
 
 # ============================================================================
@@ -82,6 +93,44 @@ class PredictionResult(BaseModel):
     predicted_value: float
     uncertainty: float
     units: str
+
+
+# PSMILES Response Models
+class PSMILESModelInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    file: str
+
+
+class PSMILESPropertyInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    units: str
+
+
+class PSMILESDescriptor(BaseModel):
+    name: str
+    description: str
+    value: Optional[float]
+    units: str
+
+
+class PSMILESPredictionResult(BaseModel):
+    smiles: str
+    model_version: str
+    property_name: str
+    predicted_value: float
+    uncertainty: float
+    units: str
+    structure_image: str
+    descriptors: List[PSMILESDescriptor]
+
+
+class PSMILESValidationResult(BaseModel):
+    valid: bool
+    error: Optional[str]
 
 
 # ============================================================================
@@ -484,6 +533,160 @@ async def health_check():
         "crabnet_loaded": predictor.is_initialized,
         "models_available": len(predictor.list_models())
     }
+
+
+# ============================================================================
+# PSMILES (Polymer) Prediction Endpoints
+# ============================================================================
+
+@app.get("/psmiles/models", response_model=List[PSMILESModelInfo])
+async def get_psmiles_models():
+    """
+    Get available PSMILES (BioCrabNet) model versions.
+    
+    Returns V1, V2, and V3 model options with descriptions.
+    """
+    try:
+        psmiles = get_psmiles()
+        return psmiles.list_models()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading models: {str(e)}")
+
+
+@app.get("/psmiles/properties", response_model=List[PSMILESPropertyInfo])
+async def get_psmiles_properties():
+    """
+    Get available polymer properties to predict.
+    
+    Currently only Glass Transition Temperature (Tg) is available.
+    """
+    try:
+        psmiles = get_psmiles()
+        return psmiles.list_properties()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading properties: {str(e)}")
+
+
+@app.get("/psmiles/validate", response_model=PSMILESValidationResult)
+async def validate_psmiles(
+    smiles: str = Query(..., description="Polymer SMILES string to validate")
+):
+    """
+    Validate a polymer SMILES string.
+    
+    Checks if the SMILES can be parsed by RDKit.
+    """
+    try:
+        psmiles = get_psmiles()
+        valid, error = psmiles.validate_smiles(smiles)
+        return PSMILESValidationResult(valid=valid, error=error if error else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
+
+@app.get("/psmiles/predict", response_model=PSMILESPredictionResult)
+async def predict_psmiles(
+    smiles: str = Query(..., description="Polymer SMILES string (e.g., *CC(*)c1ccccc1)"),
+    model_version: str = Query("v3", description="Model version: v1, v2, or v3"),
+    property_id: str = Query("glass_transition_temperature", description="Property to predict")
+):
+    """
+    Predict polymer property using BioCrabNet.
+    
+    Returns predicted value, uncertainty, structure image, and molecular descriptors.
+    """
+    try:
+        psmiles = get_psmiles()
+        
+        # Validate SMILES
+        valid, error = psmiles.validate_smiles(smiles)
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES: {error}")
+        
+        # Validate model version
+        if model_version not in ['v1', 'v2', 'v3']:
+            raise HTTPException(status_code=400, detail="Invalid model version. Use v1, v2, or v3.")
+        
+        # Get property info
+        properties = psmiles.list_properties()
+        prop_info = next((p for p in properties if p['id'] == property_id), None)
+        if not prop_info:
+            raise HTTPException(status_code=400, detail=f"Invalid property: {property_id}")
+        
+        # Predict
+        predicted_value, uncertainty = psmiles.predict(smiles, model_version)
+        
+        # Get structure image
+        structure_image = psmiles.get_structure_image(smiles)
+        
+        # Get descriptors
+        descriptors = psmiles.get_descriptors(smiles)
+        
+        return PSMILESPredictionResult(
+            smiles=smiles,
+            model_version=model_version,
+            property_name=prop_info['name'],
+            predicted_value=round(predicted_value, 2),
+            uncertainty=round(uncertainty, 2),
+            units=prop_info['units'],
+            structure_image=structure_image,
+            descriptors=[PSMILESDescriptor(**d) for d in descriptors]
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+
+@app.get("/psmiles/structure-image")
+async def get_psmiles_structure_image(
+    smiles: str = Query(..., description="Polymer SMILES string")
+):
+    """
+    Get structure image for a polymer SMILES.
+    
+    Returns base64-encoded PNG image.
+    """
+    try:
+        psmiles = get_psmiles()
+        
+        valid, error = psmiles.validate_smiles(smiles)
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES: {error}")
+        
+        image = psmiles.get_structure_image(smiles)
+        if not image:
+            raise HTTPException(status_code=500, detail="Could not generate structure image")
+        
+        return {"smiles": smiles, "image": image}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating image: {str(e)}")
+
+
+@app.get("/psmiles/descriptors", response_model=List[PSMILESDescriptor])
+async def get_psmiles_descriptors(
+    smiles: str = Query(..., description="Polymer SMILES string")
+):
+    """
+    Get molecular descriptors for a polymer SMILES.
+    
+    Returns 9 key descriptors relevant to polymer properties.
+    """
+    try:
+        psmiles = get_psmiles()
+        
+        valid, error = psmiles.validate_smiles(smiles)
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Invalid SMILES: {error}")
+        
+        descriptors = psmiles.get_descriptors(smiles)
+        return [PSMILESDescriptor(**d) for d in descriptors]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing descriptors: {str(e)}")
 
 
 # ============================================================================
